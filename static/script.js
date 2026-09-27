@@ -37,9 +37,54 @@ function getPseudoRandom(seed, max) {
     return Math.floor(randomNum % max);
 }
 
-function renderNotes(notesData) {
-    notesContainer.innerHTML = "";
+function createNoteElement(note) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "note-wrapper";
+    wrapper.dataset.id = note.id; // Tag it for DOM diffing
 
+    const bgColor = colors[getPseudoRandom(note.id, colors.length)];
+    const decoClass = decorations[getPseudoRandom(note.id + 10, decorations.length)];
+    const fontStyle = fonts[getPseudoRandom(note.id + 20, fonts.length)];
+
+    const noteEl = document.createElement("div");
+    noteEl.className = `note ${decoClass} ${note.is_pinned ? 'pinned' : ''}`;
+    noteEl.style.backgroundColor = bgColor;
+    
+    const rotation = (getPseudoRandom(note.id + 30, 50) / 10) - 2.5;
+    noteEl.style.transform = `rotate(${rotation}deg)`;
+    
+    noteEl.style.fontFamily = fontStyle; 
+    if (fontStyle.includes("Caveat")) noteEl.style.fontSize = "24px";
+    if (fontStyle.includes("Shadows")) noteEl.style.fontSize = "21px";
+    if (fontStyle.includes("Architects")) noteEl.style.fontSize = "18px";
+
+    const textDiv = document.createElement("div");
+    textDiv.className = "note-content";
+    textDiv.textContent = note.text; 
+
+    const footerDiv = document.createElement("div");
+    footerDiv.className = "note-footer";
+    footerDiv.style.fontFamily = "'Inter', sans-serif"; 
+
+    const dateObj = new Date(note.timestamp);
+    const dateString = dateObj.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    const timeString = dateObj.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+
+    const fullDateString = `${dateString} at ${timeString}`;
+    footerDiv.innerHTML = `<i class="fa-regular fa-clock"></i> ${fullDateString}`;
+
+    noteEl.appendChild(textDiv);
+    noteEl.appendChild(footerDiv);
+
+    noteEl.addEventListener("click", () => {
+        openZoomModal(note.text, bgColor, fontStyle, fullDateString);
+    });
+
+    wrapper.appendChild(noteEl);
+    return wrapper;
+}
+
+function renderNotes(notesData) {
     if (!notesData || !notesData.length) {
         notesContainer.innerHTML = `
             <div class="empty-state">
@@ -51,69 +96,71 @@ function renderNotes(notesData) {
         return;
     }
 
+    const emptyState = notesContainer.querySelector('.empty-state');
+    if (emptyState) emptyState.remove();
+
+    const existingWrappers = Array.from(notesContainer.children);
+    const newIds = notesData.map(n => String(n.id));
+
+    // 1. Remove deleted notes smoothly
+    existingWrappers.forEach(wrapper => {
+        if (!newIds.includes(wrapper.dataset.id)) {
+            wrapper.style.transform = 'scale(0)';
+            wrapper.style.opacity = '0';
+            setTimeout(() => wrapper.remove(), 400); 
+        }
+    });
+
+    // 2. Add or move notes
     notesData.forEach((note, index) => {
-        const wrapper = document.createElement("div");
-        wrapper.className = "note-wrapper";
-        wrapper.style.animationDelay = `${index * 0.04}s`;
+        let wrapper = notesContainer.querySelector(`.note-wrapper[data-id="${note.id}"]`);
 
-        const bgColor = colors[getPseudoRandom(note.id, colors.length)];
-        const decoClass = decorations[getPseudoRandom(note.id + 10, decorations.length)];
-        const fontStyle = fonts[getPseudoRandom(note.id + 20, fonts.length)];
+        if (!wrapper) {
+            // New Note Insert Animation
+            wrapper = createNoteElement(note);
+            wrapper.style.opacity = '0';
+            wrapper.style.transform = 'scale(0.5) translateY(-30px)';
+            
+            if (index >= notesContainer.children.length) {
+                notesContainer.appendChild(wrapper);
+            } else {
+                notesContainer.insertBefore(wrapper, notesContainer.children[index]);
+            }
 
-        const noteEl = document.createElement("div");
-        noteEl.className = `note ${decoClass} ${note.is_pinned ? 'pinned' : ''}`;
-        noteEl.style.backgroundColor = bgColor;
-        
-        const rotation = (getPseudoRandom(note.id + 30, 50) / 10) - 2.5;
-        noteEl.style.transform = `rotate(${rotation}deg)`;
-        
-        noteEl.style.fontFamily = fontStyle; 
-        if (fontStyle.includes("Caveat")) noteEl.style.fontSize = "24px";
-        if (fontStyle.includes("Shadows")) noteEl.style.fontSize = "21px";
-        if (fontStyle.includes("Architects")) noteEl.style.fontSize = "18px";
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    wrapper.style.opacity = '1';
+                    wrapper.style.transform = 'scale(1) translateY(0)';
+                });
+            });
+        } else {
+            // Re-order if it was pinned/unpinned
+            const currentIndex = Array.from(notesContainer.children).indexOf(wrapper);
+            if (currentIndex !== index) {
+                if (index >= notesContainer.children.length) {
+                    notesContainer.appendChild(wrapper);
+                } else {
+                    notesContainer.insertBefore(wrapper, notesContainer.children[index]);
+                }
+            }
 
-        const textDiv = document.createElement("div");
-        textDiv.className = "note-content";
-        textDiv.textContent = note.text; 
-
-        const footerDiv = document.createElement("div");
-        footerDiv.className = "note-footer";
-        footerDiv.style.fontFamily = "'Inter', sans-serif"; 
-
-        const dateObj = new Date(note.timestamp);
-        const dateString = dateObj.toLocaleDateString(undefined, {
-            month: "short", day: "numeric", year: "numeric"
-        });
-        const timeString = dateObj.toLocaleTimeString(undefined, {
-            hour: "2-digit", minute: "2-digit"
-        });
-
-        const fullDateString = `${dateString} at ${timeString}`;
-        footerDiv.innerHTML = `<i class="fa-regular fa-clock"></i> ${fullDateString}`;
-
-        noteEl.appendChild(textDiv);
-        noteEl.appendChild(footerDiv);
-
-        noteEl.addEventListener("click", () => {
-            openZoomModal(note.text, bgColor, fontStyle, fullDateString);
-        });
-
-        wrapper.appendChild(noteEl);
-        notesContainer.appendChild(wrapper);
+            // Update pin border styling dynamically
+            const noteEl = wrapper.querySelector('.note');
+            if (note.is_pinned) {
+                noteEl.classList.add('pinned');
+            } else {
+                noteEl.classList.remove('pinned');
+            }
+        }
     });
 }
 
 async function loadNotes(isBackgroundPoll = false) {
     try {
-        const response = await fetch(`/api/notes?session_id=${sessionId}`, { 
-            headers: { "Accept": "application/json" } 
-        });
+        const response = await fetch(`/api/notes?session_id=${sessionId}`, { headers: { "Accept": "application/json" } });
         
         const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-            throw new Error("Server configuration error (Check Vercel logs).");
-        }
-
+        if (!contentType || !contentType.includes("application/json")) throw new Error("Server configuration error.");
         if (!response.ok) throw new Error("Failed to load notes.");
         
         const notes = await response.json();
@@ -124,9 +171,7 @@ async function loadNotes(isBackgroundPoll = false) {
         currentNotesState = newState;
         renderNotes(notes);
     } catch (error) {
-        if (!isBackgroundPoll) {
-            showToast(error.message);
-        }
+        if (!isBackgroundPoll) showToast(error.message);
     }
 }
 
@@ -138,10 +183,8 @@ function openAddModal() {
 
 function closeAddModal(event) {
     if (event && event.type === 'click' && event.target !== addModal && !event.target.classList.contains('btn-cancel')) return;
-    
     addModal.classList.remove("active");
     document.body.classList.remove("modal-open");
-    
     textarea.value = "";
     updateCharCount();
     resetButtonState();
@@ -156,7 +199,6 @@ function resetButtonState() {
 
 async function submitNote() {
     const text = textarea.value.trim();
-
     if (!text) {
         textarea.focus();
         showToast("Write something first.");
@@ -167,8 +209,7 @@ async function submitNote() {
     if (lastPostTime) {
         const secondsSinceLastPost = Math.floor((Date.now() - parseInt(lastPostTime)) / 1000);
         if (secondsSinceLastPost < COOLDOWN_SECONDS) {
-            const waitTime = COOLDOWN_SECONDS - secondsSinceLastPost;
-            showToast(`Please wait ${waitTime} seconds before posting again.`);
+            showToast(`Please wait ${COOLDOWN_SECONDS - secondsSinceLastPost} seconds before posting again.`);
             return;
         }
     }
@@ -185,14 +226,7 @@ async function submitNote() {
             body: JSON.stringify({ text: text }) 
         });
 
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-            throw new Error("Server error. Check Vercel database setup.");
-        }
-
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Could not post note.");
-
+        if (!response.ok) throw new Error("Could not post note.");
         localStorage.setItem('lastPostTime', Date.now().toString());
 
         closeAddModal();
@@ -204,43 +238,35 @@ async function submitNote() {
     } 
 }
 
+function updateCharCount() {
+    document.getElementById("charCount").textContent = `${textarea.value.length} / 1000`;
+}
+
 function openZoomModal(text, color, font, dateStr) {
     const zoomedTextEl = document.getElementById("zoomedText");
     zoomedTextEl.textContent = text;
-    
     zoomedTextEl.style.fontFamily = font;
     if (font.includes("Caveat")) zoomedTextEl.style.fontSize = "38px";
     if (font.includes("Shadows")) zoomedTextEl.style.fontSize = "32px";
     if (font.includes("Architects")) zoomedTextEl.style.fontSize = "26px";
-
     document.getElementById("zoomedNote").style.backgroundColor = color;
     document.getElementById("zoomedDate").innerHTML = `<i class="fa-regular fa-clock"></i> ${dateStr}`;
-
     zoomModal.classList.add("active");
     document.body.classList.add("modal-open");
 }
 
 function closeZoomModal(event) {
-    if (event && event.target !== zoomModal && !event.target.classList.contains("zoom-close")) {
-        return;
-    }
+    if (event && event.target !== zoomModal && !event.target.classList.contains("zoom-close")) return;
     zoomModal.classList.remove("active");
     document.body.classList.remove("modal-open");
-}
-
-function updateCharCount() {
-    document.getElementById("charCount").textContent = `${textarea.value.length} / 1000`;
 }
 
 function showToast(message) {
     const toast = document.getElementById("toast");
     toast.textContent = message;
     toast.classList.add("show");
-
     clearTimeout(window.toastTimer);
-    window.toastTimer = setTimeout(() => {
-        toast.classList.remove("show");
-    }, 2500);
+    window.toastTimer = setTimeout(() => { toast.classList.remove("show"); }, 2500);
 }
 
 document.addEventListener("keydown", (event) => {
@@ -249,20 +275,11 @@ document.addEventListener("keydown", (event) => {
         zoomModal.classList.remove("active");
         document.body.classList.remove("modal-open");
     }
-
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-        if (addModal.classList.contains("active")) {
-            submitNote();
-        }
+        if (addModal.classList.contains("active")) submitNote();
     }
 });
 
 loadNotes();
-
 setInterval(() => loadNotes(true), 3000);
-
-document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-        loadNotes(true); 
-    }
-});
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") loadNotes(true); });
