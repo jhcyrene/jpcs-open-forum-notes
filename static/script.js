@@ -119,18 +119,20 @@ function renderNotes(notesData) {
     });
 }
 
-// --- UPDATED: loadNotes now checks the state ---
 async function loadNotes(isBackgroundPoll = false) {
     try {
-        const response = await fetch("/api/notes", {
-            headers: { "Accept": "application/json" }
-        });
+        const response = await fetch("/api/notes", { headers: { "Accept": "application/json" } });
+        
+        // Ensure the response is actually JSON before parsing
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            throw new Error("Server configuration error (Check Vercel logs).");
+        }
 
         if (!response.ok) throw new Error("Failed to load notes.");
-
+        
         const notes = await response.json();
         
-        // Check if the board actually changed before re-rendering
         const newState = notes.map(n => n.id).join(",");
         if (currentNotesState === newState) return;
         
@@ -138,14 +140,7 @@ async function loadNotes(isBackgroundPoll = false) {
         renderNotes(notes);
     } catch (error) {
         if (!isBackgroundPoll) {
-            notesContainer.innerHTML = `
-                <div class="empty-state">
-                    <i class="fa-solid fa-triangle-exclamation"></i>
-                    Unable to load thoughts.<br>
-                    Please refresh the page.
-                </div>
-            `;
-            showToast("Could not load notes.");
+            showToast(error.message);
         }
     }
 }
@@ -197,25 +192,27 @@ async function submitNote() {
     try {
         const response = await fetch("/api/notes", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            },
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
             body: JSON.stringify({ text: text }) 
         });
 
-        const result = await response.json();
+        // Safe check for HTML error pages
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            throw new Error("Server error. Check Vercel database setup.");
+        }
 
+        const result = await response.json();
         if (!response.ok) throw new Error(result.error || "Could not post note.");
 
         localStorage.setItem('lastPostTime', Date.now().toString());
 
         closeAddModal();
-        // We do NOT need to call loadNotes() manually here anymore, because the SSE listener will trigger it automatically!
         showToast("Posted anonymously.");
+        loadNotes(); // Instantly update the board for the user
     } catch (error) {
         showToast(error.message);
-        resetButtonState(); // Only reset if there was an error, otherwise modal closes
+        resetButtonState();
     } 
 }
 
