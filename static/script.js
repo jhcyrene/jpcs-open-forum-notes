@@ -1,30 +1,12 @@
 const colors = [
-    // Classic Note Pastels
     "#fdf39b", "#fbcfe8", "#bfdbfe", "#bbf7d0", "#e9d5ff",
-    
-    // Soft & Faded Warm Tones
     "#ffb3ba", "#ffdfba", "#ffd3b6", "#ffaaa5", "#fadbd8", 
     "#e6b0aa", "#f5cba7", "#fca5a5", "#fde08b", "#f9e79f",
-    
-    // Soft & Faded Cool Tones
     "#baffc9", "#bae1ff", "#a8e6cf", "#d6eaf8", "#d5f5e3", 
     "#a2d9ce", "#a9cce3", "#d4efdf", "#b5e7a0", "#93c5fd",
-    
-    // Soft & Faded Purples / Lilacs
     "#e2cbff", "#e8daef", "#ebdef0", "#d7bde2", "#c3aed6",
-
-    // --- NEW: Intense & Vibrant Colors ---
-    "#fbbf24", // Amber Gold
-    "#f97316", // Vivid Orange
-    "#ef4444", // Bright Red
-    "#ec4899", // Hot Pink
-    "#d946ef", // Fuchsia
-    "#8b5cf6", // Vivid Violet
-    "#3b82f6", // Bright Blue
-    "#0ea5e9", // Vivid Sky
-    "#06b6d4", // Electric Cyan
-    "#10b981", // Emerald Green
-    "#84cc16"  // Lime Green
+    "#fbbf24", "#f97316", "#ef4444", "#ec4899", "#d946ef",
+    "#8b5cf6", "#3b82f6", "#0ea5e9", "#06b6d4", "#10b981", "#84cc16"
 ];
 
 const decorations = ["tape-center", "pin", "tape-corner", "washi"];
@@ -43,6 +25,12 @@ const submitSpinner = document.getElementById("submitSpinner");
 
 const COOLDOWN_SECONDS = 2; 
 let currentNotesState = null; 
+
+let sessionId = sessionStorage.getItem('notevoid_session');
+if (!sessionId) {
+    sessionId = Math.random().toString(36).substring(2, 15);
+    sessionStorage.setItem('notevoid_session', sessionId);
+}
 
 function getPseudoRandom(seed, max) {
     const randomNum = Math.abs(Math.sin(seed * 12.9898) * 43758.5453);
@@ -117,7 +105,9 @@ function renderNotes(notesData) {
 
 async function loadNotes(isBackgroundPoll = false) {
     try {
-        const response = await fetch("/api/notes", { headers: { "Accept": "application/json" } });
+        const response = await fetch(`/api/notes?session_id=${sessionId}`, { 
+            headers: { "Accept": "application/json" } 
+        });
         
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
