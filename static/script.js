@@ -44,7 +44,6 @@ const submitSpinner = document.getElementById("submitSpinner");
 const COOLDOWN_SECONDS = 2; 
 let currentNotesState = null; 
 
-// Generates a consistent "random" number based on the note's unique ID
 function getPseudoRandom(seed, max) {
     const randomNum = Math.abs(Math.sin(seed * 12.9898) * 43758.5453);
     return Math.floor(randomNum % max);
@@ -69,16 +68,14 @@ function renderNotes(notesData) {
         wrapper.className = "note-wrapper";
         wrapper.style.animationDelay = `${index * 0.04}s`;
 
-// Uses the ID as a seed to pick completely random colors, fonts, and decorations
         const bgColor = colors[getPseudoRandom(note.id, colors.length)];
         const decoClass = decorations[getPseudoRandom(note.id + 10, decorations.length)];
         const fontStyle = fonts[getPseudoRandom(note.id + 20, fonts.length)];
 
         const noteEl = document.createElement("div");
-        noteEl.className = `note ${decoClass}`;
+        noteEl.className = `note ${decoClass} ${note.is_pinned ? 'pinned' : ''}`;
         noteEl.style.backgroundColor = bgColor;
         
-        // Generates a random rotation between -2.5 and 2.5 degrees
         const rotation = (getPseudoRandom(note.id + 30, 50) / 10) - 2.5;
         noteEl.style.transform = `rotate(${rotation}deg)`;
         
@@ -104,7 +101,6 @@ function renderNotes(notesData) {
         });
 
         const fullDateString = `${dateString} at ${timeString}`;
-
         footerDiv.innerHTML = `<i class="fa-regular fa-clock"></i> ${fullDateString}`;
 
         noteEl.appendChild(textDiv);
@@ -123,7 +119,6 @@ async function loadNotes(isBackgroundPoll = false) {
     try {
         const response = await fetch("/api/notes", { headers: { "Accept": "application/json" } });
         
-        // Ensure the response is actually JSON before parsing
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
             throw new Error("Server configuration error (Check Vercel logs).");
@@ -133,7 +128,7 @@ async function loadNotes(isBackgroundPoll = false) {
         
         const notes = await response.json();
         
-        const newState = notes.map(n => n.id).join(",");
+        const newState = notes.map(n => n.id + "-" + n.is_pinned).join(",");
         if (currentNotesState === newState) return;
         
         currentNotesState = newState;
@@ -147,12 +142,16 @@ async function loadNotes(isBackgroundPoll = false) {
 
 function openAddModal() {
     addModal.classList.add("active");
-    setTimeout(() => textarea.focus(), 100);
+    document.body.classList.add("modal-open");
+    setTimeout(() => textarea.focus(), 50);
 }
 
 function closeAddModal(event) {
     if (event && event.type === 'click' && event.target !== addModal && !event.target.classList.contains('btn-cancel')) return;
+    
     addModal.classList.remove("active");
+    document.body.classList.remove("modal-open");
+    
     textarea.value = "";
     updateCharCount();
     resetButtonState();
@@ -196,7 +195,6 @@ async function submitNote() {
             body: JSON.stringify({ text: text }) 
         });
 
-        // Safe check for HTML error pages
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
             throw new Error("Server error. Check Vercel database setup.");
@@ -209,7 +207,7 @@ async function submitNote() {
 
         closeAddModal();
         showToast("Posted anonymously.");
-        loadNotes(); // Instantly update the board for the user
+        loadNotes(); 
     } catch (error) {
         showToast(error.message);
         resetButtonState();
@@ -229,6 +227,7 @@ function openZoomModal(text, color, font, dateStr) {
     document.getElementById("zoomedDate").innerHTML = `<i class="fa-regular fa-clock"></i> ${dateStr}`;
 
     zoomModal.classList.add("active");
+    document.body.classList.add("modal-open");
 }
 
 function closeZoomModal(event) {
@@ -236,6 +235,7 @@ function closeZoomModal(event) {
         return;
     }
     zoomModal.classList.remove("active");
+    document.body.classList.remove("modal-open");
 }
 
 function updateCharCount() {
@@ -257,6 +257,7 @@ document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
         addModal.classList.remove("active");
         zoomModal.classList.remove("active");
+        document.body.classList.remove("modal-open");
     }
 
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
@@ -266,10 +267,8 @@ document.addEventListener("keydown", (event) => {
     }
 });
 
-// Load immediately on open
 loadNotes();
 
-// Poll the server quietly every 5 seconds
 setInterval(() => loadNotes(true), 3000);
 
 document.addEventListener("visibilitychange", () => {
